@@ -1,0 +1,59 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Profiles collection
+    match /profiles/{userId} {
+      allow read: if true;
+      allow create, update: if isSignedIn() || true;
+      allow delete: if true;
+    }
+
+    // Login Activity collection for database login tracking
+    match /login_activities/{activityId} {
+      allow read: if true;
+      allow create: if true;
+      allow update: if false;
+      allow delete: if true;
+    }
+
+    // Notifications collection for Volunteers, Admins, Donors with Real-time Snapshots
+    match /notifications/{notificationId} {
+      allow read, create: if true;
+      allow update, delete: if true;
+    }
+
+    // Donations collection
+    match /donations/{donationId} {
+      allow read, create: if true;
+      allow update, delete: if true;
+    }
+
+    // Live donor / volunteer GPS locations.
+    // Prototype/demo rule: tighten this to authenticated donor/admin ownership before production.
+    match /live_locations/{userId} {
+      allow read, create, update: if true;
+      allow delete: if true;
+    }
+
+    // Calendar events sync collection
+    match /calendar_events/{eventId} {
+      allow read: if isSignedIn() && (resource == null || resource.data.userId == request.auth.uid);
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+    }
+  }
+}

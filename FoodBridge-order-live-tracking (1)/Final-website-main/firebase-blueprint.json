@@ -1,0 +1,119 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile in FoodBridge with role and login credentials",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "fullName": { "type": "string", "maxLength": 100 },
+        "username": { "type": "string", "maxLength": 50 },
+        "email": { "type": "string", "maxLength": 150 },
+        "role": { "type": "string", "enum": ["donor", "volunteer", "ngo", "restaurant", "admin"] },
+        "phone": { "type": "string", "maxLength": 20 },
+        "organization": { "type": "string", "maxLength": 150 },
+        "address": { "type": "string", "maxLength": 200 },
+        "city": { "type": "string", "maxLength": 100 },
+        "state": { "type": "string", "maxLength": 100 },
+        "pincode": { "type": "string", "maxLength": 20 },
+        "lastLogin": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "fullName", "email", "role"]
+    },
+    "LoginActivity": {
+      "title": "LoginActivity",
+      "description": "User login audit logs and session details stored in the database",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "email": { "type": "string", "maxLength": 150 },
+        "username": { "type": "string", "maxLength": 50 },
+        "fullName": { "type": "string", "maxLength": 100 },
+        "role": { "type": "string", "maxLength": 50 },
+        "loginAt": { "type": "string" },
+        "status": { "type": "string", "maxLength": 50 },
+        "device": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["id", "userId", "email", "role", "loginAt"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "System and donation alerts for volunteers, donors, and administrators",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "targetRole": { "type": "string", "maxLength": 50 },
+        "type": { "type": "string", "maxLength": 50 },
+        "title": { "type": "string", "maxLength": 150 },
+        "description": { "type": "string", "maxLength": 300 },
+        "isRead": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "title", "createdAt"]
+    },
+    "Donation": {
+      "title": "Donation",
+      "description": "Food donation listing",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "donorId": { "type": "string" },
+        "donorName": { "type": "string", "maxLength": 100 },
+        "foodTitle": { "type": "string", "maxLength": 150 },
+        "category": { "type": "string", "maxLength": 50 },
+        "quantity": { "type": "string", "maxLength": 50 },
+        "servings": { "type": "number" },
+        "pickupAddress": { "type": "string", "maxLength": 250 },
+        "latitude": { "type": "number" },
+        "longitude": { "type": "number" },
+        "pickupTime": { "type": "string" },
+        "expiryTime": { "type": "string" },
+        "status": { "type": "string", "enum": ["available", "claimed", "in_transit", "delivered", "completed"] },
+        "volunteerId": { "type": "string" },
+        "calendarEventId": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "donorId", "foodTitle", "quantity", "status"]
+    },
+    "CalendarEvent": {
+      "title": "CalendarEvent",
+      "description": "Synced Google Calendar event for food pickup/delivery",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "donationId": { "type": "string" },
+        "googleEventId": { "type": "string" },
+        "summary": { "type": "string", "maxLength": 200 },
+        "scheduledTime": { "type": "string" },
+        "syncedAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "googleEventId", "summary"]
+    }
+  },
+  "firestore": {
+    "/profiles/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profile data with credentials and last login"
+    },
+    "/login_activities/{activityId}": {
+      "schema": "LoginActivity",
+      "description": "Stored user login activity logs and authentication records"
+    },
+    "/notifications/{notificationId}": {
+      "schema": "Notification",
+      "description": "Alerts and notifications for users, volunteers, and admins"
+    },
+    "/donations/{donationId}": {
+      "schema": "Donation",
+      "description": "Surplus food donation records"
+    },
+    "/calendar_events/{eventId}": {
+      "schema": "CalendarEvent",
+      "description": "Google Calendar synced pickup events"
+    }
+  }
+}
