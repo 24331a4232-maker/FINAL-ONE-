@@ -8,6 +8,7 @@ import {
   ChevronUp, 
   CheckCircle, 
   Bell, 
+  Award,
   Radio, 
   ArrowRight,
   ExternalLink,
@@ -18,12 +19,19 @@ import { CalendarSyncModal } from './components/CalendarSyncModal';
 import { RealTimeNotificationToast } from './components/RealTimeNotificationToast';
 import { CelebrationOverlay, DonationDetail } from './components/CelebrationOverlay';
 import { GmailComposeModal } from './components/GmailComposeModal';
+import { DonationCertificateModal } from './components/DonationCertificateModal';
 import { 
   listenToDonationSnapshots, 
   DonationAlert, 
   pushDonationToFirestore,
   getCurrentPlatformRole
 } from './services/firestoreNotifications';
+import {
+  createDonationCertificate,
+  DonationCertificate,
+  getLatestDonationCertificate,
+  saveDonationCertificate,
+} from './services/donationCertificates';
 
 export default function App() {
   const [showMapModal, setShowMapModal] = useState(false);
@@ -37,6 +45,10 @@ export default function App() {
   const [latestAlert, setLatestAlert] = useState<DonationAlert | null>(null);
   const [allAlerts, setAllAlerts] = useState<DonationAlert[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [latestDonationCertificate, setLatestDonationCertificate] = useState<DonationCertificate | null>(
+    getLatestDonationCertificate
+  );
+  const [displayedDonationCertificate, setDisplayedDonationCertificate] = useState<DonationCertificate | null>(null);
 
   useEffect(() => {
     // 1. Initialize real-time Firestore snapshots listener
@@ -79,6 +91,15 @@ export default function App() {
         });
 
         const d = customEvent.detail;
+        const certificate = createDonationCertificate(d);
+        setLatestDonationCertificate(certificate);
+        setDisplayedDonationCertificate(certificate);
+        try {
+          saveDonationCertificate(certificate);
+        } catch (error) {
+          console.error('Could not save the donation certificate in this browser:', error);
+        }
+
         setCelebrationDetails({
           food_title: d.food_name || d.food_title || d.title || 'Fresh Surplus Meal Package',
           quantity: `${d.quantity || '50'} ${d.quantity_unit || 'servings'}`.trim(),
@@ -125,6 +146,11 @@ export default function App() {
       <RealTimeNotificationToast
         alert={latestAlert}
         onDismiss={() => setLatestAlert(null)}
+      />
+
+      <DonationCertificateModal
+        certificate={displayedDonationCertificate}
+        onClose={() => setDisplayedDonationCertificate(null)}
       />
 
       {/* Floating Google Services Dock */}
@@ -191,6 +217,25 @@ export default function App() {
                   </span>
                 </div>
               </button>
+
+              {latestDonationCertificate && (
+                <button
+                  onClick={() => setDisplayedDonationCertificate(latestDonationCertificate)}
+                  className="flex w-full items-center justify-between rounded-xl border border-yellow-200 bg-yellow-50/80 p-2.5 font-medium text-yellow-950 transition hover:bg-yellow-100 dark:border-yellow-800/40 dark:bg-yellow-950/40 dark:text-yellow-200"
+                >
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-yellow-500 text-stone-900">
+                      <Award className="h-4 w-4" />
+                    </div>
+                    <div className="text-left">
+                      <p className="font-semibold text-xs leading-none">Donation Certificate</p>
+                      <p className="mt-0.5 text-[10px] text-yellow-800 dark:text-yellow-300">
+                        View or save your latest certificate
+                      </p>
+                    </div>
+                  </div>
+                </button>
+              )}
 
               {/* Google Maps Trigger */}
               <button
