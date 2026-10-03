@@ -28,32 +28,81 @@ export interface DonationAlert {
 }
 
 /**
- * Gets the current active role from FoodBridge platform session
+ * Gets the current active role from FoodBridge platform session.
+ * Supports the multiple session key shapes used across donor/volunteer/admin flows.
  */
+function normalizeRole(role: unknown): 'volunteer' | 'admin' | 'donor' | 'guest' | null {
+  if (typeof role !== 'string') return null;
+  const normalized = role.trim().toLowerCase();
+  if (normalized === 'admin') return 'admin';
+  if (normalized === 'volunteer' || normalized === 'volunteer_user') return 'volunteer';
+  if (normalized === 'donor') return 'donor';
+  return null;
+}
+
+function readProperty(value: unknown, key: string): unknown {
+  return value !== null && typeof value === 'object'
+    ? (value as Record<string, unknown>)[key]
+    : undefined;
+}
+
 export function getCurrentPlatformRole(): 'volunteer' | 'admin' | 'donor' | 'guest' {
+  const sessionKeys = [
+    'foodbridge_admin_session',
+    'foodbridge_current_session',
+    'foodbridge_user_session',
+    'foodbridge_active_session',
+    'foodbridge_user_role',
+    'foodbridge_active_role',
+    'selectedPortal',
+    'current_role',
+  ];
+
   try {
-    const adminSess = localStorage.getItem('foodbridge_admin_session');
-    if (adminSess) {
-      const parsed = JSON.parse(adminSess);
-      if (parsed?.profile?.role === 'admin' || parsed?.user?.role === 'admin') {
-        return 'admin';
+    for (const key of sessionKeys) {
+      const raw = localStorage.getItem(key) || sessionStorage.getItem(key);
+      if (!raw) continue;
+
+      const rawRole = normalizeRole(raw);
+      if (rawRole) return rawRole;
+
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        continue;
+      }
+      const parsedRole = normalizeRole(parsed);
+      if (parsedRole) return parsedRole;
+
+      const sessionRole = normalizeRole(readProperty(parsed, 'role'));
+      if (sessionRole) return sessionRole;
+
+      const candidates = [
+        readProperty(readProperty(parsed, 'profile'), 'role'),
+        readProperty(readProperty(parsed, 'user'), 'role'),
+        readProperty(parsed, 'portal'),
+        readProperty(readProperty(parsed, 'account'), 'role'),
+        readProperty(readProperty(parsed, 'data'), 'role'),
+        readProperty(parsed, 'userType'),
+        readProperty(parsed, 'type'),
+      ];
+
+      for (const candidate of candidates) {
+        const normalized = normalizeRole(candidate);
+        if (normalized) return normalized;
       }
     }
 
-    const curSess = localStorage.getItem('foodbridge_current_session');
-    if (curSess) {
-      const parsed = JSON.parse(curSess);
-      if (parsed?.role) return parsed.role;
-      if (parsed?.profile?.role) return parsed.profile.role;
-      if (parsed?.user?.role) return parsed.user.role;
-    }
-
-    // Check URL path as fallback
-    if (window.location.pathname.includes('/admin')) return 'admin';
-    if (window.location.pathname.includes('/volunteer')) return 'volunteer';
   } catch (e) {
     console.warn('Could not determine platform role:', e);
   }
+
+  const path = window.location.pathname.toLowerCase();
+  if (path.includes('/admin') || path.includes('admin')) return 'admin';
+  if (path.includes('/volunteer') || path.includes('volunteer')) return 'volunteer';
+  if (path.includes('/donor') || path.includes('donor')) return 'donor';
+
   return 'guest';
 }
 
@@ -97,12 +146,13 @@ export function listenToDonationSnapshots(
           // On new additions after initial load, trigger immediate real-time alert
           if (change.type === 'added' && !isInitialLoad) {
             const currentRole = getCurrentPlatformRole();
-            const target = String(alert.targetRole || 'all');
-            const isTarget = 
-              target === 'all' || 
-              currentRole === 'admin' ||
-              (currentRole === 'volunteer' && (target === 'volunteer' || target === 'all')) ||
-              (currentRole === target);
+            const target = String(alert.targetRole || 'all').toLowerCase();
+            const normalizedCurrentRole = normalizeRole(currentRole) || 'guest';
+            const isTarget =
+              target === 'all' ||
+              normalizedCurrentRole === 'admin' ||
+              normalizedCurrentRole === target ||
+              (normalizedCurrentRole === 'volunteer' && (target === 'volunteer' || target === 'all'));
 
             if (isTarget) {
               onNewAlert(alert);
@@ -164,44 +214,38 @@ export async function pushDonationToFirestore(donation: {
   address?: string;
   meals_count?: number;
 }): Promise<void> {
-  try {
-    const notifsRef = collection(db, 'notifications');
-    const unit = donation.quantity_unit || 'servings';
-    const org = donation.organization || donation.donor_name || 'Community Donor';
-    const city = donation.city || 'Local area';
+  const notifsRef = collection(db, 'notifications');
+  const unit = donation.quantity_unit || 'servings';
+  const org = donation.organization || donation.donor_name || 'Community Donor';
+  const city = donation.city || 'Local area';
 
-    // 1. Volunteer notification
-    await addDoc(notifsRef, {
-      type: 'new_donation',
-      targetRole: 'volunteer',
-      title: '🚨 New Food Donation Available!',
-      description: `${donation.food_name} (${donation.quantity} ${unit}) posted by ${org} in ${city}. Available for immediate pickup!`,
-      foodName: donation.food_name,
-      donorName: donation.donor_name || '',
-      organization: org,
-      quantity: `${donation.quantity} ${unit}`,
-      city,
-      isRead: false,
-      createdAt: serverTimestamp(),
-    });
+  await addDoc(notifsRef, {
+    type: 'new_donation',
+    targetRole: 'volunteer',
+    title: '🚨 New Food Donation Available!',
+    description: `${donation.food_name} (${donation.quantity} ${unit}) posted by ${org} in ${city}. Available for immediate pickup!`,
+    foodName: donation.food_name,
+    donorName: donation.donor_name || '',
+    organization: org,
+    quantity: `${donation.quantity} ${unit}`,
+    city,
+    isRead: false,
+    createdAt: serverTimestamp(),
+  });
 
-    // 2. Admin notification
-    await addDoc(notifsRef, {
-      type: 'new_donation',
-      targetRole: 'admin',
-      title: '📋 New Donation Listed',
-      description: `${org} listed ${donation.food_name} (${donation.quantity} ${unit}) in ${city}.`,
-      foodName: donation.food_name,
-      donorName: donation.donor_name || '',
-      organization: org,
-      quantity: `${donation.quantity} ${unit}`,
-      city,
-      isRead: false,
-      createdAt: serverTimestamp(),
-    });
-  } catch (error) {
-    console.warn('Could not push donation notification to Firestore:', error);
-  }
+  await addDoc(notifsRef, {
+    type: 'new_donation',
+    targetRole: 'admin',
+    title: '📋 New Donation Listed',
+    description: `${org} listed ${donation.food_name} (${donation.quantity} ${unit}) in ${city}.`,
+    foodName: donation.food_name,
+    donorName: donation.donor_name || '',
+    organization: org,
+    quantity: `${donation.quantity} ${unit}`,
+    city,
+    isRead: false,
+    createdAt: serverTimestamp(),
+  });
 }
 
 export interface LiveLocationRecord {

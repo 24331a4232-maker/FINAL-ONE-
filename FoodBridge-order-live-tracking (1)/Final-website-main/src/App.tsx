@@ -74,7 +74,9 @@ export default function App() {
     const handleDonationCreated = (e: Event) => {
       const customEvent = e as CustomEvent;
       if (customEvent.detail) {
-        pushDonationToFirestore(customEvent.detail);
+        void pushDonationToFirestore(customEvent.detail).catch((error) => {
+          console.error('Donation was created, but its notifications could not be sent:', error);
+        });
 
         const d = customEvent.detail;
         setCelebrationDetails({
